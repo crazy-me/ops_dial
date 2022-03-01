@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	DefaultSShTcpTimeout = 15 * time.Second // 与ssh建立连接的默认时间，自己设置一个就行
+	DefaultSShTcpTimeout = 10 * time.Second
 )
 
 // 错误定义
@@ -23,10 +23,33 @@ var (
 	InvalidPort     = errors.New("invalid parameters: port must be range 0 ~ 65535")
 )
 
-// 返回当前用户名
-func getCurrentUser() string {
-	user, _ := user.Current()
-	return user.Username
+type AuthConfig struct {
+	*ssh.ClientConfig
+	User     string
+	Password string
+	KeyFile  string
+	Timeout  time.Duration
+}
+
+// 存放连接的结构体
+type conn struct {
+	client     *ssh.Client
+	sftpClient *sftp.Client
+}
+
+// SSHClient 客户端
+type SSHClient struct {
+	conn
+	HostName   string
+	Port       int
+	AuthConfig AuthConfig
+}
+
+// ExecInfo 执行结果
+type ExecInfo struct {
+	Cmd      string
+	Output   []byte
+	ExitCode int
 }
 
 // TransferInfo 文件传输载体
@@ -42,13 +65,6 @@ func (t *TransferInfo) String() string {
 		t.Kind, t.Local, t.Dst, t.TransferByte)
 }
 
-// ExecInfo 执行结果
-type ExecInfo struct {
-	Cmd      string
-	Output   []byte
-	ExitCode int
-}
-
 func (e *ExecInfo) OutputString() string {
 	return string(e.Output)
 }
@@ -56,14 +72,6 @@ func (e *ExecInfo) OutputString() string {
 func (e *ExecInfo) String() string {
 	return fmt.Sprintf(`ExecInfo(cmd: "%s", exitcode: %d)`,
 		e.Cmd, e.ExitCode)
-}
-
-type AuthConfig struct {
-	*ssh.ClientConfig
-	User     string
-	Password string
-	KeyFile  string
-	Timeout  time.Duration
 }
 
 func (a *AuthConfig) setDefault() {
@@ -111,12 +119,6 @@ func (a *AuthConfig) ApplyConfig() error {
 	return nil
 }
 
-// 存放连接的结构体
-type conn struct {
-	client     *ssh.Client
-	sftpClient *sftp.Client
-}
-
 func (c *conn) Close() {
 	if c.sftpClient != nil {
 		c.sftpClient.Close()
@@ -126,14 +128,6 @@ func (c *conn) Close() {
 		c.client.Close()
 		c.client = nil
 	}
-}
-
-// SSHClient 客户端
-type SSHClient struct {
-	conn
-	HostName   string
-	Port       int
-	AuthConfig AuthConfig
 }
 
 // 设置默认端口信息
@@ -255,4 +249,10 @@ func NewSSHClient(hostname string, port int, authConfig AuthConfig) (*SSHClient,
 		return nil, err
 	}
 	return sshClient, nil
+}
+
+// 返回当前用户名
+func getCurrentUser() string {
+	user, _ := user.Current()
+	return user.Username
 }
